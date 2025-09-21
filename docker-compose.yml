@@ -1,0 +1,97 @@
+version: "3.9"
+
+services:
+  postgres:
+    image: postgres:15
+    container_name: postgres_mlflow
+    restart: always
+    environment:
+      POSTGRES_USER: mlflow_user
+      POSTGRES_PASSWORD: mlflow_pass
+      POSTGRES_DB: mlflowdb
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./postgres/init.sql:/docker-entrypoint-initdb.d/init.sql # opcional
+
+  minio:
+    image: minio/minio:latest
+    container_name: minio_mlflow
+    command: server /data --console-address ":9001"
+    restart: always
+    environment:
+      MINIO_ROOT_USER: admin
+      MINIO_ROOT_PASSWORD: supersecret
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio_data:/data
+
+  mlflow:
+    build:
+      context: .
+      dockerfile: Dockerfile.mlflow
+    container_name: mlflow_server
+    restart: always
+    command: >
+      mlflow server
+      --backend-store-uri postgresql://mlflow_user:mlflow_pass@postgres:5432/mlflowdb
+      --default-artifact-root s3://mlflow-artifacts
+      --host 0.0.0.0
+      --serve-artifacts
+    environment:
+      AWS_ACCESS_KEY_ID: admin
+      AWS_SECRET_ACCESS_KEY: supersecret
+      MLFLOW_S3_ENDPOINT_URL: http://minio:9000
+    ports:
+      - "5001:5000"
+    depends_on:
+      - postgres
+      - minio
+    volumes:
+      - mlflow_data:/mlflow
+
+  jupyterlab:
+    build:
+      context: ./jupyterlab
+      dockerfile: Dockerfile
+    container_name: jupyterlab_mlflow
+    restart: always
+    ports:
+      - "8888:8888"
+    environment:
+      JUPYTER_ENABLE_LAB: "yes"
+      TZ: "America/Bogota"
+    volumes:
+      - ./jupyterlab/notebooks:/home/jovyan/work
+    depends_on:
+      - mlflow
+    command: start-notebook.sh --NotebookApp.token=''
+
+  fastapi:
+    build:
+      context: ./fastapi
+      dockerfile: Dockerfile
+    container_name: fastapi_inference
+    restart: always
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload   # 👈 importante
+    ports:
+      - "8000:8000"
+    environment:
+      MLFLOW_TRACKING_URI: http://mlflow:5000
+      MLFLOW_S3_ENDPOINT_URL: http://minio:9000
+      AWS_ACCESS_KEY_ID: admin
+      AWS_SECRET_ACCESS_KEY: supersecret
+      MODEL_URI: "models:/PenguinClassifier/Production"
+    depends_on:
+      - mlflow
+      - minio
+      - postgres
+
+volumes:
+  postgres_data:
+  minio_data:
+  mlflow_data:
+  jupyter_notebooks:

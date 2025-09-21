@@ -1,0 +1,7 @@
+fastapi
+uvicorn
+pandas
+mlflow
+boto3
+botocore
+scikit-l
