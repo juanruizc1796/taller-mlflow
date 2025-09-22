@@ -106,5 +106,6 @@ Por medio de la interfaz grafica, hacemos la predicción bajo la especificación
 - bill_depth_mm: 40
 - flipper_length_mm: 200
 - body_mass_g: 4000
+  
 El modelo arrojo la predicción de la clase 0
 ![Texto alternativo](UsoModelo.png)
